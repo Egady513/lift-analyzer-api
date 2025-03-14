@@ -1,0 +1,12 @@
+def calculate_points(self, landmarks):
+    """Calculate points for each landmark"""
+    points = {}
+    h, w = self.frame_shape[:2]
+    
+    # Simple loop to convert landmarks to pixel coordinates
+    for idx, landmark in enumerate(landmarks):
+        x = int(landmark.x * w)
+        y = int(landmark.y * h)
+        points[idx] = (x, y)
+    
+    return points

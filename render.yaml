@@ -1,0 +1,15 @@
+services:
+  # Main API service
+  - type: web
+    name: lift-analyzer-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn api_server:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: API_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - fromGroup: lift-analyzer-secrets 
