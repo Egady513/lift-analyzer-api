@@ -9,6 +9,9 @@ from config import Config
 import torch
 import requests
 
+# Update API_URL to point to Railway
+API_URL = "https://lift-analyzer-api-production.up.railway.app"
+
 # Define API endpoints based on environment
 def get_api_url():
     """Return the appropriate API URL based on environment"""
@@ -130,20 +133,26 @@ class ProcessingScreen(tk.Frame):
     def process_video(self, video_path):
         """Process the uploaded video"""
         try:
-            self.update_status("Starting video processing...")
+            # Add Authorization header to requests
+            headers = {
+                "Authorization": self.config.api_key,  # Use your API key from config
+                "Content-Type": "application/json"
+            }
             
-            # Load and process video frames
-            self.load_video_frames(video_path)
+            # Make API request with authorization
+            payload = {"video_path": video_path}
+            response = requests.post(f"{API_URL}/process-video", 
+                                    json=payload, 
+                                    headers=headers)
             
-            # Extract pose data only, no GPT analysis
-            pose_data = self.extract_pose_data()
-            
-            # Save pose data for external analysis
-            self.save_pose_data(pose_data)
-            
-            # Show completion and provide options
-            self.show_external_analysis_options()
-            
+            # Check for successful response
+            if response.status_code == 200:
+                # Process successful response
+                return response.json()
+            else:
+                # Handle error responses
+                self.update_status(f"API Error: {response.status_code} - {response.text}")
+                
         except Exception as e:
             self.show_error("Processing Error", str(e))
     

@@ -3,7 +3,7 @@ import json
 import os
 from flask_cors import CORS
 # import torch
-# from analyze_video import process_video
+from analyze_video import process_video
 import logging
 import sys
 import tempfile
@@ -30,6 +30,15 @@ def authenticate():
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 SKIP_MODEL_LOAD = ENVIRONMENT == "production"
 
+def process_video(video_path):
+    """Mock function for testing"""
+    return {
+        "frame_count": 100,
+        "pose_data_path": "mock_path.json",
+        "angles": {"knee": 90, "hip": 120, "back": 150},
+        "feedback": "This is mock data for testing"
+    }
+
 @app.route('/process-video', methods=['POST'])
 def process_video_endpoint():
     """Process video from a given path"""
@@ -40,15 +49,30 @@ def process_video_endpoint():
         return jsonify({"error": "No video URL provided"}), 400
     
     try:
+        logger.info(f"Received video URL: {video_url}")
+        
+        # Validate URL format
+        if not video_url.startswith(('http://', 'https://')):
+            return jsonify({"error": "Invalid URL format - must start with http:// or https://"}), 400
+            
         # Download the video to a temporary file
         temp_dir = tempfile.gettempdir()
         temp_video_path = os.path.join(temp_dir, 'temp_video.mp4')
         
-        # Download the video from the URL
-        video_response = requests.get(video_url, stream=True)
-        with open(temp_video_path, 'wb') as f:
-            for chunk in video_response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        logger.info(f"Attempting to download from: {video_url}")
+        
+        # Download with better error handling
+        try:
+            video_response = requests.get(video_url, stream=True, timeout=30)
+            video_response.raise_for_status()  # Will raise exception for 4XX/5XX responses
+            
+            with open(temp_video_path, 'wb') as f:
+                for chunk in video_response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            logger.info(f"Successfully downloaded video to {temp_video_path}")
+        except requests.exceptions.RequestException as e:
+            return jsonify({"error": f"Failed to download video: {str(e)}"}), 400
         
         # Process the downloaded video
         pose_data = process_video(temp_video_path)
@@ -135,6 +159,26 @@ def process_video_base64():
         
         # Process video and return results
         # ...
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/test-url', methods=['POST'])
+def test_url():
+    """Test if a URL can be downloaded"""
+    data = request.json
+    video_url = data.get('video_url')
+    
+    if not video_url:
+        return jsonify({"error": "No URL provided"}), 400
+        
+    try:
+        response = requests.head(video_url, timeout=10)
+        return jsonify({
+            "status": "success" if response.status_code < 400 else "error",
+            "status_code": response.status_code,
+            "content_type": response.headers.get('Content-Type', 'unknown'),
+            "message": "URL is accessible" if response.status_code < 400 else "URL returned an error"
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

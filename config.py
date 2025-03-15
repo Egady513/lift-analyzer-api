@@ -1,5 +1,9 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if it exists
+load_dotenv()
 
 class Config:
     def __init__(self):
@@ -10,6 +14,12 @@ class Config:
         print(f"Config file path: {self.config_file}")
         print(f"Config file exists: {self.config_file.exists()}")
         self.load_config()
+        
+        # Load API key from environment variable, with fallback
+        self.api_key = os.environ.get("API_KEY", "24558008-cb41-4ebb-944f-4913be97c53c")
+        self.environment = os.environ.get("ENVIRONMENT", "production")
+        self.api_url = os.environ.get("API_URL", "https://web-production-fe74.up.railway.app")
+        # Any other config settings your app needs...
     
     def load_config(self):
         """Load configuration from project file"""
