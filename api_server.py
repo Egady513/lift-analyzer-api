@@ -3,7 +3,7 @@ import json
 import os
 from flask_cors import CORS
 # import torch
-from analyze_video import process_video
+# from analyze_video import process_video
 import logging
 import sys
 import tempfile
@@ -30,6 +30,7 @@ def authenticate():
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 SKIP_MODEL_LOAD = ENVIRONMENT == "production"
 
+# Rely only on our mock function
 def process_video(video_path):
     """Mock function for testing"""
     return {

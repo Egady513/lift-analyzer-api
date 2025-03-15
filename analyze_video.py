@@ -3,8 +3,57 @@ import torch
 import numpy as np
 import json
 import os
+from screens.processing_screen import analyze_pose, calculate_angles  # Import key functions
 
 def process_video(video_path):
+    """Analyze weightlifting form from video"""
+    # Call functions from processing_screen.py
+    pose_data = analyze_pose(video_path)
+    angles = calculate_angles(pose_data)
+    
+    # Generate form feedback based on angles
+    feedback = generate_feedback(angles)
+    
+    return {
+        "frame_count": len(pose_data),
+        "pose_data_path": "results.json",
+        "angles": angles,
+        "feedback": feedback
+    }
+
+def generate_feedback(angles):
+    """Generate form feedback based on joint angles"""
+    feedback = []
+    
+    # Example logic - would be based on your specific criteria
+    if angles["knee"] < 80:
+        feedback.append("Your knees could be bending too much at the bottom position.")
+    if angles["back"] < 140:
+        feedback.append("Your back appears to be rounding - try to maintain a straighter back angle.")
+    
+    return ". ".join(feedback) if feedback else "Your form looks good overall."
+
+def load_pose_model():
+    # This function is not used in the new process_video function
+    # It's kept for potential future use
+    pass
+
+def calculate_points(keypoints):
+    # This function is not used in the new process_video function
+    # It's kept for potential future use
+    pass
+
+def calculate_bar_path(points):
+    # This function is not used in the new process_video function
+    # It's kept for potential future use
+    pass
+
+def calculate_angles(points):
+    # This function is not used in the new process_video function
+    # It's kept for potential future use
+    pass
+
+def process_video_old(video_path):
     """Process video and extract pose data"""
     # Load YOLOv7 model
     model = load_pose_model()
