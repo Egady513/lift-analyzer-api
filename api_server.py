@@ -2,11 +2,18 @@ from flask import Flask, request, jsonify
 import json
 import os
 from flask_cors import CORS
-from analyze_video import process_video
+# import torch
+# from analyze_video import process_video
 import logging
+import sys
+import tempfile
+import requests
+import base64
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -20,17 +27,36 @@ def authenticate():
     if not auth or auth != os.environ.get('API_KEY', 'default-dev-key'):
         return jsonify({"error": "Unauthorized"}), 401
 
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
+SKIP_MODEL_LOAD = ENVIRONMENT == "production"
+
 @app.route('/process-video', methods=['POST'])
 def process_video_endpoint():
     """Process video from a given path"""
     data = request.json
-    video_path = data.get('video_path')
+    video_url = data.get('video_url')  # Instead of video_path
     
-    if not video_path or not os.path.exists(video_path):
-        return jsonify({"error": "Video file not found"}), 404
+    if not video_url:
+        return jsonify({"error": "No video URL provided"}), 400
     
     try:
-        pose_data = process_video(video_path)
+        # Download the video to a temporary file
+        temp_dir = tempfile.gettempdir()
+        temp_video_path = os.path.join(temp_dir, 'temp_video.mp4')
+        
+        # Download the video from the URL
+        video_response = requests.get(video_url, stream=True)
+        with open(temp_video_path, 'wb') as f:
+            for chunk in video_response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        # Process the downloaded video
+        pose_data = process_video(temp_video_path)
+        
+        # Clean up
+        os.remove(temp_video_path)
+        
+        # Return results
         return jsonify({
             "status": "success",
             "pose_data": pose_data,
@@ -71,12 +97,46 @@ def apply_analysis():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/test', methods=['GET'])
-def test_endpoint():
-    """Simple test endpoint to verify API is working"""
+def test():
+    try:
+        logger.info("Test endpoint called")
+        return jsonify({
+            "status": "success",
+            "message": "API is working correctly!"
+        })
+    except Exception as e:
+        logger.error(f"Error in test endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/ping', methods=['GET'])
+def ping():
     return jsonify({
         "status": "success",
-        "message": "API is working correctly!"
+        "message": "API is available",
+        "environment": os.environ.get("ENVIRONMENT", "unknown")
     })
+
+@app.route('/process-video-base64', methods=['POST'])
+def process_video_base64():
+    data = request.json
+    video_base64 = data.get('video_base64')
+    filename = data.get('filename', 'video.mp4')
+    
+    if not video_base64:
+        return jsonify({"error": "No video data provided"}), 400
+    
+    try:
+        # Decode base64 to file
+        temp_dir = tempfile.gettempdir()
+        temp_video_path = os.path.join(temp_dir, filename)
+        
+        with open(temp_video_path, 'wb') as f:
+            f.write(base64.b64decode(video_base64))
+        
+        # Process video and return results
+        # ...
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     # Use production WSGI server if available
