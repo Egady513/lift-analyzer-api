@@ -8,6 +8,9 @@ import os
 from config import Config
 import torch
 import requests
+import mediapipe as mp
+import urllib.request
+import tempfile
 
 # Update API_URL to point to Railway
 API_URL = "https://lift-analyzer-api-production.up.railway.app"
@@ -30,6 +33,10 @@ def get_process_video_endpoint():
 
 def get_apply_analysis_endpoint():
     return f"{get_api_url()}/apply-analysis"
+
+# Initialize MediaPipe Pose
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
 class ProcessingScreen(tk.Frame):
     def __init__(self, parent, controller):
@@ -307,182 +314,198 @@ class ProcessingScreen(tk.Frame):
         )
         self.controller.show_frame("ResultsScreen")
 
-def analyze_pose(video_path):
-    """
-    Analyze pose data from a weightlifting video
-    
-    Args:
-        video_path: URL or local path to video file
-        
-    Returns:
-        List of pose keypoints for each frame
-    """
-    print(f"Starting pose analysis for: {video_path}")
-    
-    # Download video if it's a URL
-    if video_path.startswith('http'):
-        import requests
-        import tempfile
-        print("Downloading video from URL...")
-        response = requests.get(video_path, stream=True)
-        if response.status_code != 200:
-            raise Exception(f"Failed to download video: {response.status_code}")
-        
-        # Save to temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        for chunk in response.iter_content(chunk_size=1024*1024):
-            if chunk:
-                temp_file.write(chunk)
-        temp_file.close()
-        video_path = temp_file.name
-        print(f"Video downloaded to: {video_path}")
-    
-    # Open video file
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise Exception(f"Could not open video: {video_path}")
-    
-    # Get basic video info
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
-    print(f"Video info: {frame_count} frames, {fps} FPS, {width}x{height}")
-    
-    # Create simplified mock pose data for demo
-    all_frames_data = []
-    
-    # Process every 3rd frame to reduce computation
-    for frame_idx in range(0, frame_count, 3):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        # Create mock keypoints for demo
-        # In a real implementation, you would use a pose estimation model here
-        frame_pose = {
-            "keypoints": {
-                # Simplified keypoints for weightlifting analysis
-                "nose": [width // 2, height // 4],
-                "neck": [width // 2, height // 3],
-                "right_shoulder": [width // 2 - width // 8, height // 3],
-                "left_shoulder": [width // 2 + width // 8, height // 3],
-                "right_elbow": [width // 2 - width // 6, height // 2.2],
-                "left_elbow": [width // 2 + width // 6, height // 2.2],
-                "right_wrist": [width // 2 - width // 5, height // 1.8],
-                "left_wrist": [width // 2 + width // 5, height // 1.8],
-                "right_hip": [width // 2 - width // 10, height // 1.5],
-                "left_hip": [width // 2 + width // 10, height // 1.5],
-                "right_knee": [width // 2 - width // 10, height // 1.2],
-                "left_knee": [width // 2 + width // 10, height // 1.2],
-                "right_ankle": [width // 2 - width // 10, height - height // 10],
-                "left_ankle": [width // 2 + width // 10, height - height // 10],
-            },
-            "frame": frame_idx,
-            "timestamp": frame_idx / fps
-        }
-        
-        # Add variation to make it look like movement
-        variation = np.sin(frame_idx / 10) * height / 20
-        frame_pose["keypoints"]["right_knee"][1] += variation
-        frame_pose["keypoints"]["left_knee"][1] += variation
-        frame_pose["keypoints"]["right_hip"][1] += variation / 2
-        frame_pose["keypoints"]["left_hip"][1] += variation / 2
-        
-        all_frames_data.append(frame_pose)
-    
-    # Clean up
-    cap.release()
-    if video_path.startswith('/tmp'):
-        os.remove(video_path)
-        
-    print(f"Completed pose analysis: {len(all_frames_data)} frames processed")
-    return all_frames_data
+def download_video(url):
+    """Download video from URL to a temporary file"""
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+    urllib.request.urlretrieve(url, temp_file.name)
+    return temp_file.name
 
+def calculate_angle(a, b, c):
+    """Calculate angle between three points"""
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
+    
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+    angle = np.abs(radians*180.0/np.pi)
+    
+    if angle > 180.0:
+        angle = 360-angle
+        
+    return angle
 
-def calculate_angles(pose_data):
-    """
-    Calculate joint angles from pose data
+def analyze_pose_angles(landmarks):
+    """Analyze pose landmarks and calculate key angles"""
+    # Extract coordinates
+    hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, 
+           landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
+    knee = [landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, 
+            landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y]
+    ankle = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, 
+             landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y]
+    shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, 
+                landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
     
-    Args:
-        pose_data: List of pose keypoints for each frame
-        
-    Returns:
-        Dictionary of average joint angles
-    """
-    print(f"Calculating angles from {len(pose_data)} frames")
+    # Calculate angles
+    knee_angle = calculate_angle(hip, knee, ankle)
+    hip_angle = calculate_angle(shoulder, hip, knee)
     
-    # We'll calculate angles for knee, hip, and back
-    all_knee_angles = []
-    all_hip_angles = []
-    all_back_angles = []
-    
-    for frame in pose_data:
-        keypoints = frame["keypoints"]
-        
-        # Calculate knee angle (ankle-knee-hip)
-        if all(k in keypoints for k in ["right_ankle", "right_knee", "right_hip"]):
-            ankle = keypoints["right_ankle"]
-            knee = keypoints["right_knee"]
-            hip = keypoints["right_hip"]
-            
-            knee_angle = calculate_angle(ankle, knee, hip)
-            all_knee_angles.append(knee_angle)
-        
-        # Calculate hip angle (knee-hip-shoulder)
-        if all(k in keypoints for k in ["right_knee", "right_hip", "right_shoulder"]):
-            knee = keypoints["right_knee"]
-            hip = keypoints["right_hip"]
-            shoulder = keypoints["right_shoulder"]
-            
-            hip_angle = calculate_angle(knee, hip, shoulder)
-            all_hip_angles.append(hip_angle)
-            
-        # Calculate back angle (hip-shoulder-neck)
-        if all(k in keypoints for k in ["right_hip", "right_shoulder", "neck"]):
-            hip = keypoints["right_hip"]
-            shoulder = keypoints["right_shoulder"]
-            neck = keypoints["neck"]
-            
-            back_angle = calculate_angle(hip, shoulder, neck)
-            all_back_angles.append(back_angle)
-    
-    # Calculate average angles
-    avg_knee = int(sum(all_knee_angles) / len(all_knee_angles)) if all_knee_angles else 0
-    avg_hip = int(sum(all_hip_angles) / len(all_hip_angles)) if all_hip_angles else 0
-    avg_back = int(sum(all_back_angles) / len(all_back_angles)) if all_back_angles else 0
+    # Calculate back angle (relative to horizontal)
+    # Using the angle between shoulder and hip
+    back_x_diff = shoulder[0] - hip[0]
+    back_y_diff = shoulder[1] - hip[1]
+    back_angle = 90 + np.degrees(np.arctan2(back_y_diff, back_x_diff))
     
     return {
-        "knee": avg_knee,
-        "hip": avg_hip,
-        "back": avg_back
+        "back": round(back_angle),
+        "hip": round(hip_angle),
+        "knee": round(knee_angle)
     }
 
-
-def calculate_angle(point1, point2, point3):
-    """
-    Calculate the angle between three points
+def generate_feedback(angles, exercise_type="deadlift"):
+    """Generate feedback based on angle measurements"""
+    feedback = []
     
-    Args:
-        point1, point2, point3: Points in [x,y] format
+    if exercise_type == "deadlift":
+        # Back angle feedback
+        if angles["back"] < 90:
+            feedback.append("Your back is too rounded. Try to maintain a flat back position.")
+        elif angles["back"] > 110:
+            feedback.append("Your back is too extended. Focus on a neutral spine position.")
+        else:
+            feedback.append("Good back position.")
+            
+        # Hip angle feedback
+        if angles["hip"] < 100:
+            feedback.append("You're not hinging at the hips enough. Focus on pushing your hips back.")
+        elif angles["hip"] > 120:
+            feedback.append("You're hinging too much at the hips. Engage your core more.")
+        else:
+            feedback.append("Good hip position.")
+            
+        # Knee angle feedback
+        if angles["knee"] < 70:
+            feedback.append("Your knees are too bent. This looks more like a squat than a deadlift.")
+        elif angles["knee"] > 90:
+            feedback.append("Your knees are too straight. Allow some bend in your knees.")
+        else:
+            feedback.append("Good knee position.")
+    
+    elif exercise_type == "squat":
+        # Adapt for squat-specific feedback
+        if angles["back"] < 45:
+            feedback.append("Your torso is leaning too far forward. Try to stay more upright.")
+        elif angles["back"] > 60:
+            feedback.append("Your back is too vertical. Allow some forward lean to maintain balance.")
+        else:
+            feedback.append("Good back angle for squats.")
         
-    Returns:
-        Angle in degrees
-    """
-    # Convert to numpy arrays
-    a = np.array(point1)
-    b = np.array(point2)
-    c = np.array(point3)
+        # Continue with squat-specific feedback for hips and knees...
     
-    # Calculate vectors
-    ba = a - b
-    bc = c - b
+    return " ".join(feedback)
+
+def detect_exercise_type(chat_input):
+    """Detect the type of exercise from the chat input"""
+    chat_input = chat_input.lower()
     
-    # Calculate angle using dot product
-    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+    if any(word in chat_input for word in ["deadlift", "dead lift"]):
+        return "deadlift"
+    elif any(word in chat_input for word in ["squat", "squats"]):
+        return "squat"
+    elif any(word in chat_input for word in ["bench", "press", "chest"]):
+        return "bench_press"
+    elif any(word in chat_input for word in ["clean", "power clean"]):
+        return "clean"
     
-    # Convert to degrees
-    return int(np.degrees(angle))
+    # Default to deadlift if no specific exercise is mentioned
+    return "deadlift"
+
+def process_video(video_url, chat_input):
+    """Process video and extract pose data"""
+    try:
+        # Download the video
+        video_path = download_video(video_url)
+        
+        # Open the video file
+        cap = cv2.VideoCapture(video_path)
+        
+        if not cap.isOpened():
+            raise Exception("Could not open video file")
+        
+        # Get video properties
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        
+        # Sample frames (process every 5th frame to save time)
+        frames_to_process = min(100, frame_count)
+        frame_step = max(1, frame_count // frames_to_process)
+        
+        # Detect exercise type from chat input
+        exercise_type = detect_exercise_type(chat_input)
+        
+        # Process frames and collect angle data
+        all_angles = []
+        processed_frames = 0
+        
+        for frame_idx in range(0, frame_count, frame_step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            
+            if not ret:
+                break
+                
+            # Convert to RGB for MediaPipe
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Process the frame with MediaPipe
+            results = pose.process(frame_rgb)
+            
+            if results.pose_landmarks:
+                # Calculate angles
+                angles = analyze_pose_angles(results.pose_landmarks.landmark)
+                all_angles.append(angles)
+                processed_frames += 1
+        
+        # Clean up
+        cap.release()
+        os.unlink(video_path)
+        
+        # If no frames could be processed with pose detection
+        if not all_angles:
+            return {
+                "status": "error",
+                "human_readable": "Could not detect a person in the video. Please ensure the full body is visible.",
+                "next_steps": ["Try again with a different camera angle"]
+            }
+        
+        # Find the most representative frame (e.g., middle of the movement)
+        middle_frame_idx = len(all_angles) // 2
+        representative_angles = all_angles[middle_frame_idx]
+        
+        # Generate feedback
+        feedback_text = generate_feedback(representative_angles, exercise_type)
+        
+        # Construct the response
+        result = {
+            "status": "success",
+            "human_readable": f"Successfully processed video with {processed_frames} frames.",
+            "next_steps": [
+                "Analyze the pose data to identify form issues",
+                "Generate personalized feedback",
+                "Create annotated video"
+            ],
+            "pose_data": {
+                "angles": representative_angles,
+                "feedback": feedback_text,
+                "frame_count": processed_frames
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "human_readable": f"Error processing video: {str(e)}",
+            "next_steps": ["Try again with a different video"]
+        }

@@ -9,6 +9,10 @@ import sys
 import tempfile
 import requests
 import base64
+import cv2
+import mediapipe as mp
+import numpy as np
+from screens.processing_screen import process_video, analyze_pose_angles
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -30,74 +34,24 @@ def authenticate():
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 SKIP_MODEL_LOAD = ENVIRONMENT == "production"
 
-# Rely only on our mock function
-def process_video(video_path):
-    """Mock function for testing"""
-    return {
-        "frame_count": 100,
-        "pose_data_path": "mock_path.json",
-        "angles": {"knee": 90, "hip": 120, "back": 150},
-        "feedback": "This is mock data for testing"
-    }
-
 @app.route('/process-video', methods=['POST'])
 def process_video_endpoint():
-    """Process video from a given path"""
     data = request.json
-    video_url = data.get('video_url')  # Instead of video_path
+    video_url = data.get('video_url')
+    chat_input = data.get('chatInput', 'Please analyze this weightlifting video')
     
     if not video_url:
         return jsonify({"error": "No video URL provided"}), 400
     
     try:
-        logger.info(f"Received video URL: {video_url}")
+        # Download and process the video
+        result = process_video(video_url, chat_input)
         
-        # Validate URL format
-        if not video_url.startswith(('http://', 'https://')):
-            return jsonify({"error": "Invalid URL format - must start with http:// or https://"}), 400
-            
-        # Download the video to a temporary file
-        temp_dir = tempfile.gettempdir()
-        temp_video_path = os.path.join(temp_dir, 'temp_video.mp4')
-        
-        logger.info(f"Attempting to download from: {video_url}")
-        
-        # Download with better error handling
-        try:
-            video_response = requests.get(video_url, stream=True, timeout=30)
-            video_response.raise_for_status()  # Will raise exception for 4XX/5XX responses
-            
-            with open(temp_video_path, 'wb') as f:
-                for chunk in video_response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    
-            logger.info(f"Successfully downloaded video to {temp_video_path}")
-        except requests.exceptions.RequestException as e:
-            return jsonify({"error": f"Failed to download video: {str(e)}"}), 400
-        
-        # Process the downloaded video
-        pose_data = process_video(temp_video_path)
-        
-        # Clean up
-        os.remove(temp_video_path)
-        
-        # Return results
-        return jsonify({
-            "status": "success",
-            "pose_data": pose_data,
-            "human_readable": f"Successfully processed video with {pose_data['frame_count']} frames. Pose data saved to {pose_data['pose_data_path']}.",
-            "next_steps": [
-                "Analyze the pose data to identify form issues",
-                "Generate personalized feedback",
-                "Create annotated video"
-            ]
-        })
+        # Return the results as JSON
+        return jsonify(result)
     except Exception as e:
-        return jsonify({
-            "status": "error", 
-            "error": str(e),
-            "human_readable": f"Failed to process video: {str(e)}"
-        }), 500
+        app.logger.error(f"Error processing video: {str(e)}")
+        return jsonify({"error": str(e), "status": "error"}), 500
 
 @app.route('/apply-analysis', methods=['POST'])
 def apply_analysis():
