@@ -15,9 +15,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Make entrypoint script executable
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
-# Use entrypoint script
-ENTRYPOINT ["./entrypoint.sh"]
+# Simple command without environment variable in the command itself
+CMD ["gunicorn", "api_server:app"]

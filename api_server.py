@@ -216,7 +216,7 @@ def check_dependencies():
     return jsonify(dependency_status)
 
 if __name__ == '__main__':
-    # Use fixed port 8000 instead of environment variable
-    port = 8000
+    # Get port from environment variable or use 8000 as default
+    port = int(os.environ.get("PORT", 8000))
     debug = os.environ.get("FLASK_ENV") == "development"
     app.run(host='0.0.0.0', port=port, debug=debug) 
