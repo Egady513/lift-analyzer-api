@@ -1,4 +1,4 @@
-import tkinter as tk
+﻿import tkinter as tk
 from tkinter import ttk, messagebox
 import os
 import numpy as np
@@ -433,8 +433,92 @@ def process_video(video_url, chat_input):
         # Fall back to simplified if OpenCV not available
         return process_video_simplified(video_url, chat_input)
         
-    # Original OpenCV-based implementation
-    # ...
+    try:
+        # Download the video
+        video_path = download_video(video_url)
+        
+        # Open the video file
+        cap = cv2.VideoCapture(video_path)
+        
+        if not cap.isOpened():
+            raise Exception("Could not open video file")
+        
+        # Get video properties
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        
+        # REDUCE WORKLOAD: Process fewer frames
+        frames_to_process = min(20, frame_count)  # Process max 20 frames
+        frame_step = max(1, frame_count // frames_to_process)
+        
+        # Detect exercise type from chat input
+        exercise_type = detect_exercise_type(chat_input)
+        
+        # Process frames and collect angle data
+        all_angles = []
+        processed_frames = 0
+        
+        for frame_idx in range(0, frame_count, frame_step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            
+            if not ret:
+                break
+                
+            # Convert to RGB for MediaPipe
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Process the frame with MediaPipe
+            results = pose.process(frame_rgb)
+            
+            if results.pose_landmarks:
+                # Calculate angles
+                angles = analyze_pose_angles(results.pose_landmarks.landmark)
+                all_angles.append(angles)
+                processed_frames += 1
+        
+        # Clean up
+        cap.release()
+        os.unlink(video_path)
+        
+        # If no frames could be processed with pose detection
+        if not all_angles:
+            return {
+                "status": "error",
+                "human_readable": "Could not detect a person in the video. Please ensure the full body is visible.",
+                "next_steps": ["Try again with a different camera angle"]
+            }
+        
+        # Find the most representative frame (e.g., middle of the movement)
+        middle_frame_idx = len(all_angles) // 2
+        representative_angles = all_angles[middle_frame_idx]
+        
+        # Generate feedback
+        feedback_text = generate_feedback(representative_angles, exercise_type)
+        
+        # Construct the response
+        result = {
+            "status": "success",
+            "human_readable": f"Successfully processed video with {processed_frames} frames.",
+            "next_steps": [
+                "Analyze the pose data to identify form issues",
+                "Generate personalized feedback"
+            ],
+            "pose_data": {
+                "angles": representative_angles,
+                "feedback": feedback_text,
+                "frame_count": processed_frames
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "human_readable": f"Error processing video: {str(e)}",
+            "next_steps": ["Try again with a different video"]
+        }
 
 def process_video_simplified(video_url, chat_input):
     """Simplified video processing with less resource usage"""
@@ -463,3 +547,4 @@ def process_video_simplified(video_url, chat_input):
             "frame_count": 1
         }
     }
+
