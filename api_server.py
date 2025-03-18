@@ -44,22 +44,44 @@ SKIP_MODEL_LOAD = ENVIRONMENT == "production"
 # Initialize vector database
 def initialize_knowledge_base():
     """Initialize the vector database with your lifting documentation"""
-    # Load documents from a directory
-    loader = DirectoryLoader("./lifting_knowledge", glob="**/*.md")
-    documents = loader.load()
-    
-    # Split documents into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
-    texts = text_splitter.split_documents(documents)
-    
-    # Create vector store
-    embeddings = OpenAIEmbeddings()
-    vector_store = FAISS.from_documents(texts, embeddings)
-    
-    return vector_store
+    try:
+        # Check if directory exists
+        if not os.path.exists("./lifting_knowledge"):
+            # Create directory with a placeholder file
+            os.makedirs("./lifting_knowledge", exist_ok=True)
+            with open("./lifting_knowledge/placeholder.md", "w") as f:
+                f.write("""# Basic Lifting Advice
+                
+When lifting:
+- Keep your back straight
+- Brace your core
+- Breathe properly
+- Maintain good form
+                """)
+            print("Created placeholder lifting knowledge directory")
+        
+        # Load documents from a directory
+        loader = DirectoryLoader("./lifting_knowledge", glob="**/*.md")
+        documents = loader.load()
+        
+        # Split documents into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200
+        )
+        texts = text_splitter.split_documents(documents)
+        
+        # Create vector store
+        embeddings = OpenAIEmbeddings()
+        vector_store = FAISS.from_documents(texts, embeddings)
+        
+        return vector_store
+    except Exception as e:
+        # If anything fails, return a dummy vector store
+        print(f"Error initializing knowledge base: {e}")
+        print("Using fallback knowledge base")
+        # Create an empty vector store
+        return None
 
 # Create a global vector store
 vector_store = initialize_knowledge_base()
@@ -67,6 +89,12 @@ vector_store = initialize_knowledge_base()
 # Add this function to api_server.py
 def get_relevant_knowledge(exercise_type, angles):
     """Retrieve relevant knowledge for the specific exercise and angles"""
+    # If vector_store is None, return generic advice
+    if vector_store is None:
+        return """Keep your back straight and maintain proper form throughout the exercise.
+                Focus on controlled movements and proper breathing."""
+    
+    # Normal processing with vector store
     query = f"technique advice for {exercise_type} with back angle {angles['back']}, hip angle {angles['hip']}, knee angle {angles['knee']}"
     docs = vector_store.similarity_search(query, k=3)
     return "\n\n".join([doc.page_content for doc in docs])
