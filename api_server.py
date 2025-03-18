@@ -9,10 +9,12 @@ import sys
 import tempfile
 import requests
 import base64
-import cv2
-import mediapipe as mp
+# Don't import these at the top level
+# import cv2
+# import mediapipe as mp
 import numpy as np
-from screens.processing_screen import process_video, analyze_pose_angles
+# Only import this function that doesn't require OpenCV
+from screens.processing_screen import process_video_simplified, detect_exercise_type
 from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -78,18 +80,12 @@ def process_video_endpoint():
         return jsonify({"error": "No video URL provided"}), 400
     
     try:
-        # Use simplified processing that doesn't require mediapipe
+        # Always use simplified processing
         result = process_video_simplified(video_url, chat_input)
         
-        # Add relevant knowledge from the RAG system
+        # Simple knowledge instead of RAG
         exercise_type = detect_exercise_type(chat_input)
-        relevant_knowledge = get_relevant_knowledge(
-            exercise_type, 
-            result["pose_data"]["angles"]
-        )
-        
-        # Add the knowledge to the result
-        result["pose_data"]["relevant_knowledge"] = relevant_knowledge
+        result["pose_data"]["relevant_knowledge"] = f"Basic advice for {exercise_type}"
         
         # Return the results as JSON
         return jsonify(result)
@@ -180,6 +176,44 @@ def test_url():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/check-dependencies', methods=['GET'])
+def check_dependencies():
+    """Check if major dependencies are properly installed"""
+    dependency_status = {}
+    
+    # Check OpenCV
+    try:
+        import cv2
+        dependency_status['cv2'] = {
+            'installed': True,
+            'version': cv2.__version__,
+            'path': cv2.__file__
+        }
+    except ImportError as e:
+        dependency_status['cv2'] = {
+            'installed': False,
+            'error': str(e)
+        }
+    
+    # Check other dependencies if needed
+    try:
+        import mediapipe as mp
+        dependency_status['mediapipe'] = {
+            'installed': True,
+            'version': mp.__version__,
+            'path': mp.__file__
+        }
+    except ImportError as e:
+        dependency_status['mediapipe'] = {
+            'installed': False,
+            'error': str(e)
+        }
+    
+    # Check system paths
+    dependency_status['sys_path'] = sys.path
+    
+    return jsonify(dependency_status)
 
 if __name__ == '__main__':
     # Use fixed port 8000 instead of environment variable
