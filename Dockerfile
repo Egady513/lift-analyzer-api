@@ -15,5 +15,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Run on port 8000
-CMD ["gunicorn", "api_server:app", "--bind", "0.0.0.0:8000"]
+# Use shell form to ensure environment variable expansion
+CMD gunicorn api_server:app --bind 0.0.0.0:${PORT:-8000}
