@@ -18,8 +18,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the application code
 COPY . .
 
-# Expose the port (this is just documentation, not functional)
-EXPOSE 8000
+# Copy and make startup script executable
+COPY start.sh .
+RUN chmod +x start.sh
 
-# Command to run the application - FIX: Use $PORT environment variable
-CMD gunicorn api_server:app --bind 0.0.0.0:${PORT:-8000}
+# Command to run the application via our script
+CMD ["./start.sh"]
