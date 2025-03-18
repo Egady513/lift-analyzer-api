@@ -15,5 +15,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Use shell form for proper environment variable expansion
-CMD gunicorn --bind 0.0.0.0:$PORT api_server:app
+# Make the script executable
+COPY start_server.sh .
+RUN chmod +x start_server.sh
+
+# Use the script as entrypoint
+CMD ["./start_server.sh"]
