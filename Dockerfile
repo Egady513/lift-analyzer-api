@@ -15,5 +15,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Use gunicorn config file instead of command-line arguments
-CMD ["gunicorn", "--config", "gunicorn_config.py", "api_server:app"]
+# Use shell form for proper environment variable expansion
+CMD gunicorn --bind 0.0.0.0:$PORT api_server:app
