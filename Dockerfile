@@ -1,10 +1,10 @@
 FROM python:3.9-slim
 
-# Install only Flask
-RUN pip install flask
+# Install Flask and Gunicorn
+RUN pip install flask gunicorn
 
 WORKDIR /app
 COPY test.py .
 
-# Run the test server directly with Python
-CMD ["python", "test.py"]
+# Use shell form to properly expand $PORT environment variable
+CMD gunicorn --bind 0.0.0.0:$PORT test:app
