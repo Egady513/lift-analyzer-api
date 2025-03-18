@@ -1,13 +1,17 @@
 FROM python:3.9-slim
 
-# Install required packages
-RUN pip install flask gunicorn
+# Install system dependencies required for OpenCV
+RUN apt-get update && apt-get install -y \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libfontconfig1 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy just what we need for the minimal test
-COPY test.py .
-COPY Procfile .
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Railway will use the Procfile to determine how to start the app
-CMD ["gunicorn", "test:app"]
+# Copy application code
+COPY . .
+
+# No CMD needed - railway.json will handle startup
