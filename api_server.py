@@ -14,7 +14,8 @@ import base64
 # import mediapipe as mp
 import numpy as np
 # Only import this function that doesn't require OpenCV
-from screens.processing_screen import process_video_simplified, detect_exercise_type
+from analysis.video_processor import process_video_simplified
+from analysis.lift_classifier import detect_exercise_type
 from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
