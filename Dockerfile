@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Make the script executable
-COPY start_server.sh .
-RUN chmod +x start_server.sh
+COPY docker-cmd .
+RUN chmod +x docker-cmd
 
-# Use the script as entrypoint
-CMD ["/bin/bash", "-c", "gunicorn api_server:app --bind 0.0.0.0:$PORT"]
+# Use the script directly
+CMD ["./docker-cmd"]
