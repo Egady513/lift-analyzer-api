@@ -13,6 +13,10 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from screens.processing_screen import process_video, analyze_pose_angles
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import DirectoryLoader, TextLoader
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -34,6 +38,36 @@ def authenticate():
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "development")
 SKIP_MODEL_LOAD = ENVIRONMENT == "production"
 
+# Initialize vector database
+def initialize_knowledge_base():
+    """Initialize the vector database with your lifting documentation"""
+    # Load documents from a directory
+    loader = DirectoryLoader("./lifting_knowledge", glob="**/*.md")
+    documents = loader.load()
+    
+    # Split documents into chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+    texts = text_splitter.split_documents(documents)
+    
+    # Create vector store
+    embeddings = OpenAIEmbeddings()
+    vector_store = FAISS.from_documents(texts, embeddings)
+    
+    return vector_store
+
+# Create a global vector store
+vector_store = initialize_knowledge_base()
+
+# Add this function to api_server.py
+def get_relevant_knowledge(exercise_type, angles):
+    """Retrieve relevant knowledge for the specific exercise and angles"""
+    query = f"technique advice for {exercise_type} with back angle {angles['back']}, hip angle {angles['hip']}, knee angle {angles['knee']}"
+    docs = vector_store.similarity_search(query, k=3)
+    return "\n\n".join([doc.page_content for doc in docs])
+
 @app.route('/process-video', methods=['POST'])
 def process_video_endpoint():
     data = request.json
@@ -44,8 +78,18 @@ def process_video_endpoint():
         return jsonify({"error": "No video URL provided"}), 400
     
     try:
-        # Download and process the video
-        result = process_video(video_url, chat_input)
+        # Use simplified processing that doesn't require mediapipe
+        result = process_video_simplified(video_url, chat_input)
+        
+        # Add relevant knowledge from the RAG system
+        exercise_type = detect_exercise_type(chat_input)
+        relevant_knowledge = get_relevant_knowledge(
+            exercise_type, 
+            result["pose_data"]["angles"]
+        )
+        
+        # Add the knowledge to the result
+        result["pose_data"]["relevant_knowledge"] = relevant_knowledge
         
         # Return the results as JSON
         return jsonify(result)
@@ -138,7 +182,7 @@ def test_url():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    # Use production WSGI server if available
-    port = int(os.environ.get("PORT", 8000))
+    # Use fixed port 8000 instead of environment variable
+    port = 8000
     debug = os.environ.get("FLASK_ENV") == "development"
     app.run(host='0.0.0.0', port=port, debug=debug) 
