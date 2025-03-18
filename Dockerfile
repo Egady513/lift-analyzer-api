@@ -15,9 +15,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Make the script executable
-COPY docker-cmd .
-RUN chmod +x docker-cmd
+# Make sure the entrypoint script is executable
+RUN chmod +x /app/entrypoint.sh
 
-# Use the script directly
-CMD ["./docker-cmd"]
+# Use entrypoint script to handle PORT environment variable
+ENTRYPOINT ["/app/entrypoint.sh"]
