@@ -1,10 +1,13 @@
 FROM python:3.9-slim
 
-# Install Flask and Gunicorn
+# Install required packages
 RUN pip install flask gunicorn
 
 WORKDIR /app
-COPY test.py .
 
-# Use shell form to properly expand $PORT environment variable
-CMD gunicorn --bind 0.0.0.0:$PORT test:app
+# Copy just what we need for the minimal test
+COPY test.py .
+COPY Procfile .
+
+# Railway will use the Procfile to determine how to start the app
+CMD ["gunicorn", "test:app"]
