@@ -20,4 +20,4 @@ COPY start_server.sh .
 RUN chmod +x start_server.sh
 
 # Use the script as entrypoint
-CMD ["./start_server.sh"]
+CMD ["/bin/bash", "-c", "gunicorn api_server:app --bind 0.0.0.0:$PORT"]
