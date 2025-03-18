@@ -15,5 +15,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Use the exec form with direct port, since you have PORT=8000 set in variables
-CMD ["gunicorn", "api_server:app", "--bind", "0.0.0.0:8000"]
+# Make entrypoint script executable
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Use entrypoint script
+ENTRYPOINT ["./entrypoint.sh"]
