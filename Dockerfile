@@ -15,5 +15,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-# Simple command without environment variable in the command itself
-CMD ["gunicorn", "api_server:app"]
+# Use gunicorn config file instead of command-line arguments
+CMD ["gunicorn", "--config", "gunicorn_config.py", "api_server:app"]
