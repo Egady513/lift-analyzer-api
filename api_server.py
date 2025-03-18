@@ -80,12 +80,9 @@ def process_video_endpoint():
         return jsonify({"error": "No video URL provided"}), 400
     
     try:
-        # Always use simplified processing
-        result = process_video_simplified(video_url, chat_input)
-        
-        # Simple knowledge instead of RAG
-        exercise_type = detect_exercise_type(chat_input)
-        result["pose_data"]["relevant_knowledge"] = f"Basic advice for {exercise_type}"
+        # Use the new analyze_video function from the analyze_video module
+        from analyze_video import analyze_video
+        result = analyze_video(video_url, chat_input)
         
         # Return the results as JSON
         return jsonify(result)
@@ -214,6 +211,15 @@ def check_dependencies():
     dependency_status['sys_path'] = sys.path
     
     return jsonify(dependency_status)
+
+# At the top of the file, add this debug code
+try:
+    print("===== DEBUG PORT INFO =====")
+    print(f"PORT env var: {os.environ.get('PORT')}")
+    print(f"All environment variables: {dict(os.environ)}")
+    print("===== END DEBUG =====")
+except Exception as e:
+    print(f"Debug error: {e}")
 
 if __name__ == '__main__':
     # Get port from environment variable or use 8000 as default
